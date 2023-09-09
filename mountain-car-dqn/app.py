@@ -4,9 +4,11 @@ import gymnasium as gym
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 from collections import deque
 
 env = gym.make("MountainCar-v0")
+writer = SummaryWriter("runs/dqn_mountain_car")
 
 
 class QNetwork(nn.Module):
@@ -27,6 +29,7 @@ class DQNAgent:
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
+        self.global_step = 0
         self.memory = deque(maxlen=2000)
 
         self.gamma = 0.95
@@ -80,23 +83,31 @@ class DQNAgent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        self.global_step += 1
+
+        writer.add_scalar("Loss", loss.item(), self.global_step)
 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
 
-EPISODES = 15000
+EPISODES = 1000
 agent = DQNAgent(state_size=2, action_size=3)
 batch_size = 32
 
 for e in range(EPISODES):
     state, info = env.reset(seed=42)
+    total_reward = 0
     for time in range(200):
         action = agent.act(state)
         next_state, reward, done, _, _ = env.step(action)
-        # reward = reward if not done else -10
+        reward = reward if not done else -10
         agent.remember(state, action, reward, next_state, done)
+        total_reward += reward
         state = next_state
+        writer.add_scalar("Reward", total_reward, e)
+        writer.add_scalar("Epsilon", agent.epsilon, e)
+
         if done:
             print(
                 f"episode: {e}/{EPISODES}, score: {time}, epsilon: {agent.epsilon:.2f}"
@@ -114,3 +125,5 @@ while True:
     state = next_state
     if done:
         break
+
+writer.close()
